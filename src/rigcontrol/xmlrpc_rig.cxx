@@ -1205,18 +1205,29 @@ void * flrig_thread_loop(void *d)
 					if (!connected_to_flrig)
 						flrig_connection();
 					else {
+						// [subspace] A PTT request waiting (new_ptt) ends this
+						// poll cycle: it used to wait for every getter in the
+						// cycle (up to 7 back-to-back calls, each a possible
+						// radio exchange in flrig) because new_ptt was only
+						// checked at the top of the loop. The skipped getters
+						// run in the next cycle.
 						flrig_get_ptt();
 						if (trx_state != STATE_RX || ptt_state) {
-							flrig_get_pwrmeter();
-							flrig_get_wpm();
+							void (*const tx_poll[])() = {
+								flrig_get_pwrmeter, flrig_get_wpm };
+							for (auto get : tx_poll) {
+								if (new_ptt > -1) break;
+								get();
+							}
 						} else {
-							flrig_get_frequency();
-							flrig_get_smeter();
-							flrig_get_notch();
-							flrig_get_wpm();
-
-							flrig_get_mode();
-							flrig_get_bw();
+							void (*const rx_poll[])() = {
+								flrig_get_frequency, flrig_get_smeter,
+								flrig_get_notch, flrig_get_wpm,
+								flrig_get_mode, flrig_get_bw };
+							for (auto get : rx_poll) {
+								if (new_ptt > -1) break;
+								get();
+							}
 						}
 					}
 				}
