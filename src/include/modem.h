@@ -180,7 +180,7 @@ public:
 	virtual void		thor_send_avatar(){}
 	virtual void		m_thor_send_avatar(){}
 
-	void		set_stopflag(bool b) { stopflag = b;};
+	void		set_stopflag(bool b);
 	bool		get_stopflag() const { return stopflag; };
 
 	unsigned	get_cap(void) const { return cap; }

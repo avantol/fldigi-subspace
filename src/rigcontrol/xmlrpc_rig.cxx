@@ -152,7 +152,10 @@ void xmlrpc_rig_set_qsy(unsigned long long rfc)
 // push to talk
 //----------------------------------------------------------------------
 
+static int  new_reserve = 0;
+
 void exec_flrig_ptt() {
+	new_reserve = 0; // a waiting reservation was for this PTT change, or an earlier one
 	if (!connected_to_flrig) {
 		new_ptt = -1;
 		return;
@@ -228,6 +231,53 @@ void set_flrig_ptt(int on) {
 		}
 	}
 	new_ptt = on;
+}
+
+// [subspace] End-of-transmit reservation (flrig-subspace's rig.reserve_ptt):
+// once the TX audio has ended, the unkey is a short, known time away (RSID
+// end marker if enabled, the sound card draining, PTT_off_delay). Asking
+// flrig then to keep its own radio polling off the serial line means the
+// unkey does not wait there behind a poll exchange. Sent by the flrig
+// thread, the one sender of PTT, on the one connection; flrig ends the
+// reservation when the unkey arrives. A flrig without the method answers
+// with a fault: no more reservations until fldigi reconnects to flrig.
+// Not for CW, like flrig_ptt_at_decision.
+static const int reserve_unkey_ms = 2000; // CHOSEN: flrig-subspace's cap; it ends at the unkey
+static bool reserve_supported = true;
+
+void flrig_reserve_unkey() {
+	if (!active_modem || active_modem->get_mode() == MODE_CW)
+		return;
+	if (!connected_to_flrig || !reserve_supported)
+		return;
+	new_reserve = 1;
+}
+
+static void exec_flrig_reserve() {
+	new_reserve = 0;
+	XmlRpcValue result;
+	try {
+		bool ret, fault;
+		{
+			guard_lock flrig_lock(&mutex_flrig);
+			ret = flrig_client->execute("rig.reserve_ptt", reserve_unkey_ms, result, timeout);
+			fault = flrig_client->isFault();
+		}
+		if (ret && fault) {
+			reserve_supported = false;
+			LOG_INFO("%s", "flrig has no rig.reserve_ptt (stock flrig): end-of-TX reservation off");
+		}
+		if (ret) {
+P2F( (fault ? "reserve_ptt FAULT" : "reserve_ptt") );
+			return;
+		}
+	} catch (...) {}
+	LOG_ERROR("%s", "rig.reserve_ptt failed");
+}
+
+// a PTT change or a reservation is waiting for the flrig thread
+static bool flrig_request_waiting() {
+	return new_ptt > -1 || new_reserve;
 }
 
 void xmlrpc_rig_show_ptt(void *data)
@@ -1165,6 +1215,7 @@ void flrig_connection()
 			LOG_VERBOSE("%s", method_str.c_str() );
 P2F( method_str );
 			connected_to_flrig = true;
+			reserve_supported = true; // this may be a different flrig
 			poll_interval = progdefaults.flrig_poll;
 			flrig_get_xcvr();
 			Fl::awake(flrig_setQSY);
@@ -1217,6 +1268,10 @@ void * flrig_thread_loop(void *d)
 				exec_flrig_ptt();
 				continue;
 			}
+			if (new_reserve) {
+				exec_flrig_reserve();
+				continue;
+			}
 		}
 
 		if (connected_to_flrig && poll_interval != progdefaults.flrig_poll)
@@ -1231,9 +1286,9 @@ void * flrig_thread_loop(void *d)
 					if (!connected_to_flrig)
 						flrig_connection();
 					else {
-						// [subspace] A PTT request waiting (new_ptt) ends this
-						// poll cycle: it used to wait for every getter in the
-						// cycle (up to 7 back-to-back calls, each a possible
+						// [subspace] A PTT request or reservation waiting ends
+						// this poll cycle: it used to wait for every getter in
+						// the cycle (up to 7 back-to-back calls, each a possible
 						// radio exchange in flrig) because new_ptt was only
 						// checked at the top of the loop. The skipped getters
 						// run in the next cycle.
@@ -1242,7 +1297,7 @@ void * flrig_thread_loop(void *d)
 							void (*const tx_poll[])() = {
 								flrig_get_pwrmeter, flrig_get_wpm };
 							for (auto get : tx_poll) {
-								if (new_ptt > -1) break;
+								if (flrig_request_waiting()) break;
 								get();
 							}
 						} else {
@@ -1251,7 +1306,7 @@ void * flrig_thread_loop(void *d)
 								flrig_get_notch, flrig_get_wpm,
 								flrig_get_mode, flrig_get_bw };
 							for (auto get : rx_poll) {
-								if (new_ptt > -1) break;
+								if (flrig_request_waiting()) break;
 								get();
 							}
 						}

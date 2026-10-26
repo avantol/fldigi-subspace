@@ -490,6 +490,12 @@ void trx_trx_transmit_loop()
 			if (trx_state != STATE_ABORT && trx_state != STATE_RESTART)
 				trx_state = STATE_RX;
 
+		// [subspace] the TX audio has ended: the unkey comes next. Renews
+		// the reservation made at the end of text or the stop request (a
+		// long postamble can outlast it) and covers a TX ended by abort,
+		// which reaches neither.
+		flrig_reserve_unkey();
+
 		if (ReedSolomon->assigned(active_modem->get_mode()) &&
 			progdefaults.rsid_eot_squelch && // test for RsID_EOT
 			progdefaults.TransmitRSid &&

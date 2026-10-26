@@ -9767,7 +9767,22 @@ char szTestChar[] = "E|I|S|T|M|O|A|V";
 extern int get_fsq_tx_char();
 bool disable_lowercase = false;
 
+static int get_tx_char_source(void);
+
+// [subspace] Every end of text a modem sees comes through here (typed text,
+// macros ^r/^R, ARQ, KISS, FSQ); the postamble and the sound card drain
+// still follow (about 1.3 s in PSK31), then the unkey: ask flrig now to keep
+// the radio line clear for it. A stop request asks the same in
+// modem::set_stopflag; the end of the TX audio asks again (trx.cxx).
 int get_tx_char(void)
+{
+	int c = get_tx_char_source();
+	if (c == GET_TX_CHAR_ETX)
+		flrig_reserve_unkey();
+	return c;
+}
+
+static int get_tx_char_source(void)
 {
 	enum { STATE_CHAR, STATE_CTRL };
 	static int state = STATE_CHAR;

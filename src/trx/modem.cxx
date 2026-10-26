@@ -45,6 +45,7 @@
 #include "status.h"
 #include "debug.h"
 #include "audio_alert.h"
+#include "rigsupport.h"
 
 modem *null_modem = 0;
 modem *cw_modem = 0;
@@ -330,6 +331,16 @@ void modem::set_freq(double freq)
 		center_rxfilt_at_track();
 
 	REQ(put_freq, frequency);
+}
+
+// [subspace] A stop request (the T/R button, Escape) ends the TX like an end
+// of text: the postamble and the sound card drain follow, then the unkey.
+// Ask flrig now to keep the radio line clear for it (see get_tx_char).
+void modem::set_stopflag(bool b)
+{
+	stopflag = b;
+	if (b && trx_state == STATE_TX) // not at shutdown or in RX: no unkey would end it
+		flrig_reserve_unkey();
 }
 
 void modem::set_freqlock(bool on)
