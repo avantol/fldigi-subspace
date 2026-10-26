@@ -60,7 +60,7 @@ jobs:
         run: |
           autoreconf -fi
           ./configure --disable-flarq --disable-nls --without-asciidoc --without-hamlib \
-            LDFLAGS="-static-libgcc -static-libstdc++"
+            LDFLAGS="-static-libgcc -static-libstdc++" LIBS="-lwinmm"
 
       - name: Build
         run: make -j4
