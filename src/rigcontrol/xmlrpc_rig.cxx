@@ -182,9 +182,35 @@ P2F( (ptt_state ? "set ON": "set OFF") );
 	return;
 }
 
+// [subspace] flrig PTT on at the DECISION to transmit (trx_transmit /
+// trx_transmit_psm / trx_tune), not after the RX loop winds down: that
+// path waits for the RX audio block in progress (512 samples, up to
+// 64 ms at 8 kHz), the block's processing, the RX sound card close and a
+// queued call to the GUI thread before trx_loop's REQ(set_flrig_ptt, 1).
+// Only the flrig PTT moves; fldigi's other PTT methods switch where they
+// always did. Not for CW: flrig CW keying sends its own cwio commands from
+// set_flrig_ptt. trx_loop's REQ(set_flrig_ptt, 1) still runs and is then
+// skipped (early_flrig_ptt). A start that is cancelled before trx_loop
+// sees it goes to RX, which sends PTT off as always.
+static int early_flrig_ptt = 0;
+
+void flrig_ptt_at_decision() {
+	if (!active_modem || active_modem->get_mode() == MODE_CW)
+		return;
+	if (!connected_to_flrig)
+		return;
+	early_flrig_ptt = 1;
+	new_ptt = 1;
+}
+
 void set_flrig_ptt(int on) {
 	if (!active_modem)
 		return;
+	if (on && early_flrig_ptt) { // already sent at the decision
+		early_flrig_ptt = 0;
+		return;
+	}
+	if (!on) early_flrig_ptt = 0;
 	if (active_modem->get_mode() == MODE_CW) {
 		if (progdefaults.CATkeying_disable_ptt && 
 				active_modem->get_mode() == MODE_CW &&

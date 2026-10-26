@@ -1043,18 +1043,22 @@ void trx_close()
 }
 
 //=============================================================================
-void trx_transmit_psm(void) { trx_state = STATE_TX; };
+// [subspace] flrig_ptt_at_decision: flrig PTT goes out when fldigi decides
+// to transmit, not after the RX loop winds down (see xmlrpc_rig.cxx)
+void trx_transmit_psm(void) { flrig_ptt_at_decision(); trx_state = STATE_TX; };
 
 void trx_transmit(void) {
 	if (progdefaults.show_psm_btn &&
 		progStatus.kpsql_enabled &&
 		(!PERFORM_CPS_TEST || !active_modem->XMLRPC_CPS_TEST))
-		psm_transmit();
-	else
+		psm_transmit();   // busy-channel wait: PTT comes at trx_transmit_psm
+	else {
+		flrig_ptt_at_decision();
 		trx_state = STATE_TX;
+	}
 }
 
-void trx_tune(void) { trx_state = STATE_TUNE; }
+void trx_tune(void) { flrig_ptt_at_decision(); trx_state = STATE_TUNE; }
 void trx_receive(void) { trx_state = STATE_RX; }
 
 //=============================================================================

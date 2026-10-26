@@ -95,6 +95,8 @@ extern void FLRIG_start_flrig_thread();
 extern void stop_flrig_thread();
 extern void reconnect_to_flrig();
 extern void set_flrig_ptt(int on);
+// [subspace] flrig PTT on at the moment fldigi decides to transmit
+extern void flrig_ptt_at_decision();
 extern void set_flrig_freq(unsigned long long fr);
 extern void set_flrig_mode(const char *md);
 extern void set_flrig_bw(int bw1, int bw2 = 0);
