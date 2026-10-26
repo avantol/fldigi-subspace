@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=fldigi (Subspace)
+GenericName=Amateur Radio Digital Modem
+Comment=fldigi with faster flrig PTT for Subspace Edition / MAGNET
+Exec=fldigi-subspace
+Icon=fldigi-subspace
+Terminal=false
+Type=Application
+Categories=Network;HamRadio;

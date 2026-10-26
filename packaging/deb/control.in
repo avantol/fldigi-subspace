@@ -1,0 +1,16 @@
+Package: fldigi-subspace
+Version: @VERSION@
+Section: hamradio
+Priority: optional
+Architecture: amd64
+Depends: libfltk1.3t64 | libfltk1.3, libfltk-images1.3t64 | libfltk-images1.3, libhamlib4t64 | libhamlib4, libpng16-16t64 | libpng16-16, libportaudio2, libpulse0, libsamplerate0, libsndfile1, libudev1, libx11-6, libstdc++6, libgcc-s1, libc6
+Maintainer: WM8Q <ssdev.avantol@xoxy.net>
+Homepage: https://github.com/avantol/fldigi-subspace
+Description: fldigi with faster flrig PTT for Subspace Edition
+ fldigi 4.2.13 (W1HKJ and the fldigi developers, GPL-3.0) changed so that,
+ with rig control through flrig, the radio keys as soon as fldigi decides to
+ transmit instead of after its flrig poll cycle and receive loop wind down
+ (median 70 ms -> 20 ms on the bench). Meant for stations that share one
+ radio between several programs through flrig (MAGNET). Installs beside a
+ stock fldigi as fldigi-subspace, with its own data folder; both use
+ ~/.fldigi and the same ports, so run one at a time.

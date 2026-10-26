@@ -1,0 +1,98 @@
+# Windows build of fldigi-subspace: MSYS2 UCRT64, NSIS installer that
+# installs BESIDE a stock fldigi (FLDIGI_NAME=fldigi-subspace: its own
+# Program Files folder, Start menu entry and uninstall entry). The DLLs
+# fldigi.exe needs go into its own folder. Settings are fldigi's usual
+# fldigi.files folder, shared with a stock fldigi: run one at a time.
+# No hamlib (MSYS2 does not package it): rig control through flrig, which
+# is what this fork is for.
+name: Windows build (fldigi-subspace)
+
+on:
+  push:
+    branches: [subspace]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          # MSYS2 builds FLTK 1.3 (what fldigi needs; "fltk" is now 1.4)
+          # only for UCRT64 and the clang environments, not MINGW64
+          msystem: UCRT64
+          update: true
+          install: >-
+            autoconf automake make pkgconf gettext-devel
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-fltk1.3
+            mingw-w64-ucrt-x86_64-libpng
+            mingw-w64-ucrt-x86_64-libsamplerate
+            mingw-w64-ucrt-x86_64-libsndfile
+            mingw-w64-ucrt-x86_64-portaudio
+            mingw-w64-ucrt-x86_64-nsis
+
+      - name: Version
+        id: ver
+        run: |
+          # tag v4.2.13-subspace1 -> 4.2.13-subspace1; branch builds -> 4.2.13-dev.<sha>
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="4.2.13-dev.${GITHUB_SHA:0:8}"
+          fi
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          echo "Version: $VER"
+
+      - name: Configure
+        run: |
+          autoreconf -fi
+          ./configure --disable-flarq --disable-nls --without-asciidoc --without-hamlib \
+            LDFLAGS="-static-libgcc -static-libstdc++"
+
+      - name: Build
+        run: make -j4
+
+      - name: Collect the DLLs fldigi.exe needs
+        run: |
+          strip src/fldigi.exe
+          ls -la src/fldigi.exe
+          mkdir -p src/dist
+          # every DLL from the UCRT64 tree goes beside fldigi.exe;
+          # Windows' own DLLs are left out
+          ldd src/fldigi.exe | awk '$3 ~ /^\/ucrt64\// {print $3}' | sort -u | tee dlls.txt
+          xargs -a dlls.txt -I{} cp {} src/dist/
+          ls -la src/dist
+
+      - name: Installer
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          cd src
+          makensis -V2 -NOCD \
+            -DINSTALLER_FILE="fldigi-subspace-${VER}_setup.exe" \
+            -DLICENSE_FILE="../COPYING" \
+            -DSUPPORT_URL="https://github.com/avantol/fldigi-subspace" \
+            -DUPDATES_URL="https://github.com/avantol/fldigi-subspace/releases" \
+            -DFLDIGI_DOCS_URL="https://www.w1hkj.org/FldigiHelp/index.html" \
+            -DGUIDE_URL="https://www.w1hkj.org/beginners.html" \
+            -DHAVE_FLDIGI \
+            -DFLDIGI_NAME=fldigi-subspace \
+            -DFLDIGI_BINARY=fldigi.exe \
+            -DFLDIGI_VERSION="${VER}" \
+            -DDIST_DEPS=dist \
+            ../data/win32/fldigi.nsi
+          ls -la *_setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fldigi-subspace-windows-${{ steps.ver.outputs.ver }}
+          path: |
+            src/fldigi-subspace-*_setup.exe
+            src/fldigi.exe
+            src/dist/
