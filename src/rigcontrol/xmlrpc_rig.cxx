@@ -24,6 +24,7 @@
 // =====================================================================
 
 #include <iostream>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -114,7 +115,9 @@ static std::string posted_modes;
 static std::string posted_mode = "";
 
 static int  ptt_state = 0;
-static int  new_ptt = -1;
+// [subspace] The pending PTT request. Atomic so exec_flrig_ptt can clear it
+// only if it is still the value it sent (see there).
+static std::atomic<int> new_ptt{-1};
 
 static bool wait_freq = false; // wait for transceiver to respond
 static int  wait_freq_timeout = 5; // 5 polls and then disable wait
@@ -156,8 +159,16 @@ static int  new_reserve = 0;
 
 void exec_flrig_ptt() {
 	new_reserve = 0; // a waiting reservation was for this PTT change, or an earlier one
+	// [subspace] Send a COPY of the request and clear the request only if
+	// it is still the one sent. The GUI thread may post the opposite state
+	// (the unkey) while this RPC is in flight; the old unconditional
+	// "new_ptt = -1" after the RPC erased it and the radio stayed keyed
+	// (N1MAG review 2026-10-27; reproduced on stock 4.2.13 as well).
+	int sent = new_ptt.load();
+	if (sent < 0)
+		return;
 	if (!connected_to_flrig) {
-		new_ptt = -1;
+		new_ptt.compare_exchange_strong(sent, -1);
 		return;
 	}
 
@@ -167,21 +178,21 @@ void exec_flrig_ptt() {
 		bool ret;
 		{
 			guard_lock flrig_lock(&mutex_flrig);
-			ret = flrig_client->execute("rig.set_ptt", new_ptt, result, timeout);
+			ret = flrig_client->execute("rig.set_ptt", sent, result, timeout);
 		}
 		if (ret) {
 P2F( (ptt_state ? "set ON": "set OFF") );
 			LOG_VERBOSE("ptt %s", ptt_state ? "ON" : "OFF");
-			new_ptt = -1;
+			new_ptt.compare_exchange_strong(sent, -1);
 			return;
 		}
 	} catch (...) {
-		new_ptt = -1;
+		new_ptt.compare_exchange_strong(sent, -1);
 		return;
 	}
 
-	LOG_ERROR("fldigi/flrig PTT %s failure", new_ptt ? "ON" : "OFF");
-	new_ptt = -1;
+	LOG_ERROR("fldigi/flrig PTT %s failure", sent ? "ON" : "OFF");
+	new_ptt.compare_exchange_strong(sent, -1);
 	return;
 }
 
@@ -193,8 +204,8 @@ P2F( (ptt_state ? "set ON": "set OFF") );
 // Only the flrig PTT moves; fldigi's other PTT methods switch where they
 // always did. Not for CW: flrig CW keying sends its own cwio commands from
 // set_flrig_ptt. trx_loop's REQ(set_flrig_ptt, 1) still runs and is then
-// skipped (early_flrig_ptt). A start that is cancelled before trx_loop
-// sees it goes to RX, which sends PTT off as always.
+// skipped (early_flrig_ptt). A start cancelled before trx_loop sees it is
+// un-keyed by flrig_ptt_cancel_at_decision (below).
 static int early_flrig_ptt = 0;
 
 void flrig_ptt_at_decision() {
@@ -204,6 +215,20 @@ void flrig_ptt_at_decision() {
 		return;
 	early_flrig_ptt = 1;
 	new_ptt = 1;
+}
+
+// [subspace] The counterpart: a start cancelled at the decision is un-keyed
+// at the decision. While early_flrig_ptt is still set the trx thread has
+// not consumed the start -- it is inside its current RX read -- so trx_loop
+// never dispatches TX/TUNE and its RX case's REQ(set_flrig_ptt, 0) never
+// runs: fldigi in RX, radio keyed (N1MAG review 2026-10-27, reproduced
+// with a mock transport). Once the trx thread has taken the start, the
+// normal path un-keys as always and this does nothing.
+void flrig_ptt_cancel_at_decision() {
+	if (!early_flrig_ptt)
+		return;
+	early_flrig_ptt = 0;
+	new_ptt = 0;
 }
 
 void set_flrig_ptt(int on) {

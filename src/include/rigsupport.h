@@ -97,6 +97,8 @@ extern void reconnect_to_flrig();
 extern void set_flrig_ptt(int on);
 // [subspace] flrig PTT on at the moment fldigi decides to transmit
 extern void flrig_ptt_at_decision();
+// [subspace] a start cancelled before the trx thread took it: un-key now
+extern void flrig_ptt_cancel_at_decision();
 // [subspace] TX audio ended: ask flrig to keep the radio line clear for the unkey
 extern void flrig_reserve_unkey();
 extern void set_flrig_freq(unsigned long long fr);

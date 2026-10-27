@@ -1065,7 +1065,7 @@ void trx_transmit(void) {
 }
 
 void trx_tune(void) { flrig_ptt_at_decision(); trx_state = STATE_TUNE; }
-void trx_receive(void) { trx_state = STATE_RX; }
+void trx_receive(void) { flrig_ptt_cancel_at_decision(); trx_state = STATE_RX; }
 
 //=============================================================================
 
