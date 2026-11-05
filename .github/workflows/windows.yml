@@ -95,6 +95,19 @@ jobs:
             ../data/win32/fldigi.nsi
           ls -la *_setup.exe
 
+      # every DLL collected above must be inside the installer (releases up to
+      # subspace3 shipped fldigi.exe alone and makensis only warned)
+      - name: Check the installer holds fldigi.exe and every DLL
+        run: |
+          cd src
+          "/c/Program Files/7-Zip/7z.exe" l fldigi-subspace-*_setup.exe | tee contents.txt
+          missing=0
+          for f in fldigi.exe $(xargs -a ../dlls.txt -n1 basename); do
+            if grep -q -F " $f" contents.txt; then echo "in installer: $f"
+            else echo "MISSING from installer: $f"; missing=1; fi
+          done
+          exit $missing
+
       - uses: actions/upload-artifact@v4
         with:
           name: fldigi-subspace-windows-${{ steps.ver.outputs.ver }}

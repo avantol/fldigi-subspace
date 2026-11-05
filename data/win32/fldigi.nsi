@@ -128,7 +128,10 @@ SectionEnd
         SectionIn RO
         SetOutPath $INSTDIR
         File "${FLDIGI_BINARY}"
-	File /nonfatal "${DIST_DEPS}/*"
+	# [subspace] "\*", not "/*": the native Windows makensis (MSYS2 CI) found
+	# no files with "/*" and /nonfatal hid it, so every installer shipped
+	# without its DLLs. Not /nonfatal: a missing DLL now fails the build.
+	File "${DIST_DEPS}\*"
         !ifdef FLDIGI_LOCALE_DIR
         SetOutPath $INSTDIR\locale
         File /r "${FLDIGI_LOCALE_PATH}/${FLDIGI_LOCALE_DIR}\*.mo"
