@@ -1049,11 +1049,32 @@ void trx_close()
 }
 
 //=============================================================================
+// [subspace] Receive only (main.rx_only, the Arbiter's hold) refuses every
+// start of a transmission here, where every route ends: the T/R and Tune
+// buttons, XML-RPC main.tx / main.tune, ARQ and KISS text (FLAMP, flmsg),
+// macros and the modems' own replies. Upstream only greyed out the buttons
+// and dropped the audio; trx_loop still sent PTT on at every pass, so a
+// receive-only fldigi keyed the radio with no audio (bench 2026-11-10:
+// about 93 PTT on requests a second, until main.rx_tx). Text already queued
+// stays queued, as it does after an abort.
+static bool refuse_rx_only(const char *what)
+{
+	if (!rx_only) return false;
+	LOG_INFO("receive only: %s refused", what);
+	REQ(release_tx_buttons);
+	return true;
+}
+
 // [subspace] flrig_ptt_at_decision: flrig PTT goes out when fldigi decides
 // to transmit, not after the RX loop winds down (see xmlrpc_rig.cxx)
-void trx_transmit_psm(void) { flrig_ptt_at_decision(); trx_state = STATE_TX; };
+void trx_transmit_psm(void) {
+	if (refuse_rx_only("transmit")) return;
+	flrig_ptt_at_decision();
+	trx_state = STATE_TX;
+};
 
 void trx_transmit(void) {
+	if (refuse_rx_only("transmit")) return;
 	if (progdefaults.show_psm_btn &&
 		progStatus.kpsql_enabled &&
 		(!PERFORM_CPS_TEST || !active_modem->XMLRPC_CPS_TEST))
@@ -1064,7 +1085,11 @@ void trx_transmit(void) {
 	}
 }
 
-void trx_tune(void) { flrig_ptt_at_decision(); trx_state = STATE_TUNE; }
+void trx_tune(void) {
+	if (refuse_rx_only("tune")) return;
+	flrig_ptt_at_decision();
+	trx_state = STATE_TUNE;
+}
 void trx_receive(void) { flrig_ptt_cancel_at_decision(); trx_state = STATE_RX; }
 
 //=============================================================================

@@ -10287,6 +10287,20 @@ void * set_xmtrcv_button_false(void)
 	return (void *)0;
 }
 
+// [subspace] To be called from the main thread. trx_transmit / trx_tune
+// refused (receive only): put back up the T/R or Tune button the request
+// pressed on its way there (main.tx, main.tune, the buttons themselves).
+void * release_tx_buttons(void)
+{
+	wf->xmtrcv->value(false);
+	wf->xmtrcv_selection_color(RGBCOLOR(XmtColor));
+	wf->xmtrcv->redraw();
+	btnTune->value(0);
+	btnTune->labelcolor(FL_FOREGROUND_COLOR);
+	btnTune->redraw();
+	return (void *)0;
+}
+
 // To be called from the main thread.
 void * set_xmtrcv_selection_color_transmitting(void)
 {

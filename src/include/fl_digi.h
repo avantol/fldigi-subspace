@@ -439,6 +439,7 @@ extern void showDTMF(const std::string s);
 
 extern void * set_xmtrcv_button_false(void);
 extern void * set_xmtrcv_button_true(void);
+extern void * release_tx_buttons(void); // [subspace]
 extern void * set_xmtrcv_selection_color_pending(void);
 extern void * set_xmtrcv_selection_color_transmitting(void);
 extern void xmtrcv_selection_color(Fl_Color clr);
